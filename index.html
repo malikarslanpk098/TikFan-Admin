@@ -99,6 +99,8 @@
       color: #8a8aaa; text-decoration: none; font-size: 0.8rem; border: 1px solid #2a2a3a;
     }
     .back-link i { margin-right: 6px; }
+    .loading-spinner { text-align: center; padding: 30px; color: #555; }
+    .loading-spinner i { font-size: 2rem; margin-bottom: 10px; display: block; }
     @media (max-width: 600px) { .input-group { flex-direction: column; align-items: stretch; } }
   </style>
 </head>
@@ -155,7 +157,7 @@
         <button id="refreshUsersBtn" class="secondary"><i class="fas fa-sync"></i> Refresh</button>
       </div>
       <div id="userList">
-        <div style="text-align:center;padding:20px;color:#555;"><i class="fas fa-spinner fa-spin"></i> Loading users...</div>
+        <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading users...</div>
       </div>
     </div>
 
@@ -163,7 +165,7 @@
     <div id="tabTasks" class="admin-card hidden">
       <h2><i class="fas fa-list"></i> All Active Tasks</h2>
       <div id="taskList">
-        <div style="text-align:center;padding:20px;color:#555;"><i class="fas fa-spinner fa-spin"></i> Loading tasks...</div>
+        <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading tasks...</div>
       </div>
     </div>
 
@@ -252,6 +254,7 @@
     let allTasks = [];
     let currentTab = 'users';
     let priceCache = { likes: 2, comments: 3, reposts: 4, followers: 5 };
+    let isLoading = false;
 
     function showToast(msg, isError = false) {
       toastMsg.textContent = msg;
@@ -261,19 +264,16 @@
       setTimeout(() => { toast.style.display = 'none'; }, 3000);
     }
 
-    // AUTH - Fixed: admin@tikfan.com / 6262777
+    // AUTH
     async function adminLogin() {
       const email = adminEmailInput.value.trim();
       const pass = adminPasswordInput.value.trim();
       if (!email || !pass) { authError.textContent = 'Enter email and password.'; return; }
       try {
-        // Force sign in with provided credentials
         await auth.signInWithEmailAndPassword(email, pass);
       } catch (e) {
-        // If login fails, check if it's the default admin and try to create
         if (email === 'admin@tikfan.com' && pass === '6262777') {
           try {
-            // Try to create admin account if it doesn't exist
             await auth.createUserWithEmailAndPassword(email, pass);
             showToast('Admin account created! Please login again.', false);
             authError.textContent = 'Account created. Login again.';
@@ -288,8 +288,6 @@
 
     auth.onAuthStateChanged(async (user) => {
       if (user) {
-        // Allow any user to access admin (since we have fixed credentials)
-        // But we can restrict to specific email if needed
         const isAdmin = user.email && (user.email === 'admin@tikfan.com' || user.email.includes('admin'));
         if (!isAdmin) {
           authError.textContent = 'You are not authorized as admin.';
@@ -299,6 +297,7 @@
         authSection.style.display = 'none';
         adminPanel.classList.remove('hidden');
         adminEmailSpan.textContent = user.email;
+        
         // Load prices
         try {
           const doc = await db.collection('admin').doc('settings').get();
@@ -310,10 +309,14 @@
             priceReposts.value = priceCache.reposts || 4;
             priceFollowers.value = priceCache.followers || 5;
           }
-        } catch (e) {}
-        loadStats();
-        loadAllUsers();
-        loadAllTasks();
+        } catch (e) {
+          console.error('Price load error:', e);
+        }
+        
+        // Load all data
+        await loadStats();
+        await loadAllUsers();
+        await loadAllTasks();
         switchTab('users');
       } else {
         authSection.style.display = 'block';
@@ -332,25 +335,33 @@
         const usersSnap = await db.collection('users').get();
         let totalCoin = 0, refs = 0, taskCount = 0;
         const tasksPromises = [];
+        
         usersSnap.forEach(doc => {
           const d = doc.data();
           totalCoin += (d.coins || 0);
           refs += (d.referrals || 0);
           tasksPromises.push(db.collection('users').doc(doc.id).collection('activeTasks').get());
         });
+        
         const taskResults = await Promise.allSettled(tasksPromises);
         taskResults.forEach(r => {
           if (r.status === 'fulfilled') taskCount += r.value.size;
         });
+        
         totalUsers.textContent = usersSnap.size;
         totalCoins.textContent = totalCoin.toLocaleString();
         totalTasks.textContent = taskCount;
         totalReferrals.textContent = refs;
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error('Stats error:', e);
+        showToast('Error loading stats: ' + e.message, true);
+      }
     }
 
     // LOAD USERS
     async function loadAllUsers(filter = '') {
+      if (isLoading) return;
+      isLoading = true;
       try {
         const snap = await db.collection('users').get();
         allUsers = [];
@@ -360,7 +371,13 @@
           allUsers.push(d);
         });
         renderUsers(filter);
-      } catch (e) { showToast('Error loading users: ' + e.message, true); }
+      } catch (e) {
+        console.error('Users load error:', e);
+        showToast('Error loading users: ' + e.message, true);
+        userList.innerHTML = `<div style="padding:20px;text-align:center;color:#ff6b6b;">Error loading users: ${e.message}</div>`;
+      } finally {
+        isLoading = false;
+      }
     }
 
     function renderUsers(filter = '') {
@@ -373,10 +390,12 @@
           (u.referralCode || '').toLowerCase().includes(q)
         );
       }
+      
       if (filtered.length === 0) {
-        userList.innerHTML = `<div style="padding:20px;text-align:center;color:#555;">No users found.</div>`;
+        userList.innerHTML = `<div style="padding:20px;text-align:center;color:#555;">No users found. ${allUsers.length > 0 ? 'Try different search.' : 'No users in database.'}</div>`;
         return;
       }
+      
       let html = '';
       filtered.forEach(u => {
         const email = u.email || 'no-email';
@@ -459,10 +478,17 @@
         const usersSnap = await db.collection('users').get();
         let html = '';
         let count = 0;
+        
+        if (usersSnap.size === 0) {
+          taskList.innerHTML = '<div style="padding:20px;text-align:center;color:#555;">No users found in database.</div>';
+          return;
+        }
+        
         for (const doc of usersSnap.docs) {
           const uid = doc.id;
           const userEmail = doc.data().email || uid;
           const tasksSnap = await db.collection('users').doc(uid).collection('activeTasks').get();
+          
           tasksSnap.forEach(t => {
             const d = t.data();
             count++;
@@ -480,8 +506,12 @@
             `;
           });
         }
-        if (count === 0) html = '<div style="padding:20px;text-align:center;color:#555;">No active tasks across all users.</div>';
+        
+        if (count === 0) {
+          html = '<div style="padding:20px;text-align:center;color:#555;">No active tasks across all users.</div>';
+        }
         taskList.innerHTML = html;
+        
         taskList.querySelectorAll('[data-action="deletetask"]').forEach(btn => {
           btn.addEventListener('click', async function() {
             const uid = this.dataset.uid;
@@ -494,7 +524,11 @@
             }
           });
         });
-      } catch (e) { showToast('Error loading tasks: ' + e.message, true); }
+      } catch (e) {
+        console.error('Tasks load error:', e);
+        showToast('Error loading tasks: ' + e.message, true);
+        taskList.innerHTML = `<div style="padding:20px;text-align:center;color:#ff6b6b;">Error loading tasks: ${e.message}</div>`;
+      }
     }
 
     // SEARCH
@@ -529,15 +563,22 @@
       try {
         await db.collection('admin').doc('settings').set({ prices }, { merge: true });
         priceCache = prices;
-        showToast('Prices saved!');
-      } catch (e) { showToast('Error: ' + e.message, true); }
+        showToast('Prices saved successfully!');
+      } catch (e) {
+        showToast('Error: ' + e.message, true);
+      }
     });
 
     // BAN / WARN by email
     async function findUserByEmail(email) {
-      const snap = await db.collection('users').where('email', '==', email).get();
-      if (snap.empty) return null;
-      return snap.docs[0];
+      try {
+        const snap = await db.collection('users').where('email', '==', email).get();
+        if (snap.empty) return null;
+        return snap.docs[0];
+      } catch (e) {
+        showToast('Error searching user: ' + e.message, true);
+        return null;
+      }
     }
 
     warnUserBtn.addEventListener('click', async () => {
@@ -573,14 +614,16 @@
       loadAllUsers(searchUser.value);
     });
 
-    // initial load
-    loadStats();
-    loadAllUsers();
-    loadAllTasks();
+    // Auto refresh every 30 seconds
+    setInterval(() => { 
+      if (auth.currentUser) {
+        loadStats();
+        if (currentTab === 'users') loadAllUsers(searchUser.value);
+        if (currentTab === 'tasks') loadAllTasks();
+      }
+    }, 30000);
 
-    setInterval(() => { if (auth.currentUser) loadStats(); }, 30000);
-
-    console.log('🔥 Admin Panel v3.0 loaded.');
+    console.log('🔥 Admin Panel v3.0 loaded with fixed data display.');
   })();
 </script>
 </body>
