@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.5, user-scalable=yes">
+  <title>TikFan Boostify · Admin Panel</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, system-ui, sans-serif; }
+    body { background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+    .app-header {
+      background: #121212; border-bottom: 1px solid #2a2a2a; padding: 14px 20px;
+      display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 20;
+    }
+    .app-header h1 { font-size: 1.4rem; font-weight: 700; }
+    .app-header h1 span:first-child { color: #FE2C55; }
+    .app-header h1 span:last-child { color: #f5b342; }
+    .container { max-width: 800px; margin: 0 auto; padding: 16px; }
+    .admin-card {
+      background: #121212; border: 1px solid #2a2a2a; border-radius: 28px;
+      padding: 20px 18px; margin-bottom: 20px; box-shadow: 0 8px 0 #070707;
+    }
+    .admin-card h2 { font-size: 1.2rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; color: #f5b342; }
+    .admin-card h2 i { color: #FE2C55; }
+    .input-group { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .input-group input, .input-group select {
+      background: #1a1a1a; border: 1px solid #333; border-radius: 60px;
+      padding: 10px 18px; color: #fff; font-size: 0.9rem; flex: 1; min-width: 150px; outline: none;
+    }
+    .input-group input:focus, .input-group select:focus { border-color: #FE2C55; }
+    .input-group button {
+      background: #FE2C55; border: none; padding: 10px 24px; border-radius: 60px;
+      font-weight: 700; color: #fff; cursor: pointer; box-shadow: 0 4px 0 #8f1a30;
+      transition: all 0.1s ease; display: flex; align-items: center; gap: 6px;
+    }
+    .input-group button:active { transform: translateY(3px); box-shadow: 0 1px 0 #8f1a30; }
+    .input-group button.secondary { background: #2a2a3a; box-shadow: 0 4px 0 #1a1a1a; }
+    .user-item {
+      background: #1a1a1a; border-radius: 16px; padding: 12px 16px;
+      border: 1px solid #2a2a2a; margin-bottom: 8px; display: flex;
+      flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .user-item .info { flex: 1; min-width: 150px; }
+    .user-item .info strong { color: #fff; }
+    .user-item .info .email { color: #8a8aaa; font-size: 0.8rem; }
+    .user-item .info .coins { color: #f5b342; font-weight: 700; }
+    .user-item .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .user-item .actions button {
+      background: #2a2a2a; border: none; padding: 6px 14px; border-radius: 60px;
+      font-size: 0.75rem; font-weight: 600; color: #ccc; cursor: pointer;
+      transition: all 0.1s ease; border: 1px solid #3a3a3a;
+    }
+    .user-item .actions button:active { transform: scale(0.95); }
+    .user-item .actions button.warn { background: #5a2a2a; color: #ff7a7a; border-color: #7a3a3a; }
+    .user-item .actions button.coin { background: #2a2a3a; color: #f5b342; border-color: #4a4a5a; }
+    .user-item .actions button.ban { background: #3a1a1a; color: #ff4d4d; border-color: #5a2a2a; }
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px;
+    }
+    .stat-box {
+      background: #1a1a2a; border-radius: 16px; padding: 12px 10px; text-align: center;
+      border: 1px solid #2a2a3a;
+    }
+    .stat-box .num { font-size: 1.6rem; font-weight: 700; color: #f5b342; }
+    .stat-box .label { font-size: 0.7rem; color: #8a8aaa; margin-top: 2px; }
+    .badge { background: #FE2C55; color: #fff; font-size: 0.65rem; padding: 2px 10px; border-radius: 60px; margin-left: 6px; }
+    .tab-bar {
+      display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap;
+    }
+    .tab-bar button {
+      background: #1a1a1a; border: 1px solid #2a2a2a; padding: 8px 18px;
+      border-radius: 60px; color: #8a8aaa; font-weight: 600; cursor: pointer;
+      transition: all 0.15s ease; font-size: 0.85rem;
+    }
+    .tab-bar button.active { background: #FE2C55; color: #fff; border-color: #FE2C55; }
+    .tab-bar button:active { transform: scale(0.95); }
+    .hidden { display: none; }
+    .search-result { margin-top: 12px; }
+    .price-editor { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+    .price-editor label { color: #aab; font-weight: 500; }
+    .price-editor input { width: 70px; background: #1a1a1a; border: 1px solid #333; border-radius: 60px; padding: 6px 12px; color: #fff; }
+    .price-editor button { background: #2a2a3a; border: none; padding: 6px 18px; border-radius: 60px; color: #fff; cursor: pointer; }
+    .price-editor button:active { transform: scale(0.95); }
+    .toast {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      background: #1a1a2a; border: 1px solid #f5b342; border-radius: 60px;
+      padding: 12px 28px; color: #f5b342; font-weight: 600; z-index: 999;
+      box-shadow: 0 10px 40px #000000cc; display: none;
+    }
+    .toast i { margin-right: 8px; }
+    .flex { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .mt-2 { margin-top: 12px; }
+    .w-full { width: 100%; }
+    .back-link {
+      display: inline-block; background: #1a1a2a; padding: 8px 18px; border-radius: 60px;
+      color: #8a8aaa; text-decoration: none; font-size: 0.8rem; border: 1px solid #2a2a3a;
+    }
+    .back-link i { margin-right: 6px; }
+    @media (max-width: 600px) { .input-group { flex-direction: column; align-items: stretch; } }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1><span>⚙️</span> <span>Admin</span> <span style="font-size:0.8rem;color:#8a8aaa;">· TikFan Boostify</span></h1>
+  <div class="flex">
+    <span id="adminEmail" style="color:#8a8aaa;font-size:0.8rem;"></span>
+    <a href="#" class="back-link" onclick="window.location.href='index.html'"><i class="fas fa-arrow-left"></i> Back to App</a>
+    <button id="logoutBtn" style="background:#2a2a2a;border:1px solid #444;padding:6px 14px;border-radius:60px;color:#ff6b6b;cursor:pointer;font-weight:600;">Logout</button>
+  </div>
+</header>
+
+<div class="container">
+  <!-- Auth -->
+  <div id="authSection" class="admin-card" style="text-align:center;">
+    <h2><i class="fas fa-lock"></i> Admin Login</h2>
+    <div style="color:#ff8a8a;font-size:0.9rem;margin-bottom:10px;" id="authError"></div>
+    <div class="input-group" style="justify-content:center;">
+      <input type="email" id="adminEmailInput" placeholder="Admin email" value="admin@tikfan.com" style="min-width:200px;">
+      <input type="password" id="adminPasswordInput" placeholder="Password" value="6262777" style="min-width:160px;">
+      <button id="adminLoginBtn"><i class="fas fa-sign-in-alt"></i> Login</button>
+    </div>
+    <div style="color:#555;font-size:0.7rem;margin-top:8px;">Default: admin@tikfan.com / 6262777</div>
+  </div>
+
+  <!-- Admin Panel -->
+  <div id="adminPanel" class="hidden">
+    <!-- Stats -->
+    <div class="admin-card">
+      <h2><i class="fas fa-chart-pie"></i> Overview</h2>
+      <div class="stats-grid">
+        <div class="stat-box"><div class="num" id="totalUsers">0</div><div class="label">Total Users</div></div>
+        <div class="stat-box"><div class="num" id="totalCoins">0</div><div class="label">Coins in System</div></div>
+        <div class="stat-box"><div class="num" id="totalTasks">0</div><div class="label">Active Tasks</div></div>
+        <div class="stat-box"><div class="num" id="totalReferrals">0</div><div class="label">Referrals</div></div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <button class="active" data-tab="users"><i class="fas fa-users"></i> Users</button>
+      <button data-tab="tasks"><i class="fas fa-tasks"></i> Tasks</button>
+      <button data-tab="settings"><i class="fas fa-sliders-h"></i> Settings</button>
+    </div>
+
+    <!-- Users Tab -->
+    <div id="tabUsers" class="admin-card">
+      <h2><i class="fas fa-user-cog"></i> Manage Users</h2>
+      <div class="input-group">
+        <input type="text" id="searchUser" placeholder="Search by email or name...">
+        <button id="searchBtn"><i class="fas fa-search"></i> Search</button>
+        <button id="refreshUsersBtn" class="secondary"><i class="fas fa-sync"></i> Refresh</button>
+      </div>
+      <div id="userList">
+        <div style="text-align:center;padding:20px;color:#555;"><i class="fas fa-spinner fa-spin"></i> Loading users...</div>
+      </div>
+    </div>
+
+    <!-- Tasks Tab -->
+    <div id="tabTasks" class="admin-card hidden">
+      <h2><i class="fas fa-list"></i> All Active Tasks</h2>
+      <div id="taskList">
+        <div style="text-align:center;padding:20px;color:#555;"><i class="fas fa-spinner fa-spin"></i> Loading tasks...</div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="tabSettings" class="admin-card hidden">
+      <h2><i class="fas fa-dollar-sign"></i> Price Settings</h2>
+      <div class="price-editor">
+        <label>Likes: <input type="number" id="priceLikes" value="2" min="1"></label>
+        <label>Comments: <input type="number" id="priceComments" value="3" min="1"></label>
+        <label>Reposts: <input type="number" id="priceReposts" value="4" min="1"></label>
+        <label>Followers: <input type="number" id="priceFollowers" value="5" min="1"></label>
+        <button id="savePricesBtn"><i class="fas fa-save"></i> Save</button>
+      </div>
+      <div class="mt-2">
+        <h3 style="color:#f5b342;font-size:1rem;margin:16px 0 8px;"><i class="fas fa-gavel"></i> Ban / Warn User</h3>
+        <div class="input-group">
+          <input type="text" id="banUserInput" placeholder="User email to ban/warn">
+          <button id="warnUserBtn" class="secondary"><i class="fas fa-exclamation-triangle"></i> Warn</button>
+          <button id="banUserBtn" style="background:#6a1a1a;box-shadow:0 4px 0 #3a0a0a;"><i class="fas fa-ban"></i> Ban</button>
+          <button id="unbanUserBtn" style="background:#1a5a2a;box-shadow:0 4px 0 #0a3a1a;"><i class="fas fa-undo"></i> Unban</button>
+        </div>
+        <div style="color:#8a8aaa;font-size:0.8rem;">Warning: User will see a warning on app. Ban: User cannot login.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><i class="fas fa-check-circle"></i> <span id="toastMsg">Done</span></div>
+
+<script>
+  (function() {
+    const firebaseConfig = {
+      apiKey: "AIzaSyC3c1wsN9JR-SXMN4roQ1LGo2qWULjILtQ",
+      authDomain: "tikfan-boostify.firebaseapp.com",
+      projectId: "tikfan-boostify",
+      storageBucket: "tikfan-boostify.firebasestorage.app",
+      messagingSenderId: "505883605078",
+      appId: "1:505883605078:web:93f652b982904abba263f7",
+      measurementId: "G-LZYR1W2JN8"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    // DOM refs
+    const authSection = document.getElementById('authSection');
+    const adminPanel = document.getElementById('adminPanel');
+    const adminEmailInput = document.getElementById('adminEmailInput');
+    const adminPasswordInput = document.getElementById('adminPasswordInput');
+    const adminLoginBtn = document.getElementById('adminLoginBtn');
+    const authError = document.getElementById('authError');
+    const adminEmailSpan = document.getElementById('adminEmail');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    const totalUsers = document.getElementById('totalUsers');
+    const totalCoins = document.getElementById('totalCoins');
+    const totalTasks = document.getElementById('totalTasks');
+    const totalReferrals = document.getElementById('totalReferrals');
+
+    const userList = document.getElementById('userList');
+    const searchUser = document.getElementById('searchUser');
+    const searchBtn = document.getElementById('searchBtn');
+    const refreshUsersBtn = document.getElementById('refreshUsersBtn');
+
+    const taskList = document.getElementById('taskList');
+    const tabBtns = document.querySelectorAll('.tab-bar button');
+    const tabUsers = document.getElementById('tabUsers');
+    const tabTasks = document.getElementById('tabTasks');
+    const tabSettings = document.getElementById('tabSettings');
+
+    const priceLikes = document.getElementById('priceLikes');
+    const priceComments = document.getElementById('priceComments');
+    const priceReposts = document.getElementById('priceReposts');
+    const priceFollowers = document.getElementById('priceFollowers');
+    const savePricesBtn = document.getElementById('savePricesBtn');
+
+    const banUserInput = document.getElementById('banUserInput');
+    const warnUserBtn = document.getElementById('warnUserBtn');
+    const banUserBtn = document.getElementById('banUserBtn');
+    const unbanUserBtn = document.getElementById('unbanUserBtn');
+
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toastMsg');
+
+    let allUsers = [];
+    let allTasks = [];
+    let currentTab = 'users';
+    let priceCache = { likes: 2, comments: 3, reposts: 4, followers: 5 };
+
+    function showToast(msg, isError = false) {
+      toastMsg.textContent = msg;
+      toast.style.display = 'block';
+      toast.style.borderColor = isError ? '#ff4d4d' : '#f5b342';
+      toast.style.color = isError ? '#ff8a8a' : '#f5b342';
+      setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    }
+
+    // AUTH - Fixed: admin@tikfan.com / 6262777
+    async function adminLogin() {
+      const email = adminEmailInput.value.trim();
+      const pass = adminPasswordInput.value.trim();
+      if (!email || !pass) { authError.textContent = 'Enter email and password.'; return; }
+      try {
+        // Force sign in with provided credentials
+        await auth.signInWithEmailAndPassword(email, pass);
+      } catch (e) {
+        // If login fails, check if it's the default admin and try to create
+        if (email === 'admin@tikfan.com' && pass === '6262777') {
+          try {
+            // Try to create admin account if it doesn't exist
+            await auth.createUserWithEmailAndPassword(email, pass);
+            showToast('Admin account created! Please login again.', false);
+            authError.textContent = 'Account created. Login again.';
+          } catch (createErr) {
+            authError.textContent = createErr.message;
+          }
+        } else {
+          authError.textContent = e.message;
+        }
+      }
+    }
+
+    auth.onAuthStateChanged(async (user) => {
+      if (user) {
+        // Allow any user to access admin (since we have fixed credentials)
+        // But we can restrict to specific email if needed
+        const isAdmin = user.email && (user.email === 'admin@tikfan.com' || user.email.includes('admin'));
+        if (!isAdmin) {
+          authError.textContent = 'You are not authorized as admin.';
+          await auth.signOut();
+          return;
+        }
+        authSection.style.display = 'none';
+        adminPanel.classList.remove('hidden');
+        adminEmailSpan.textContent = user.email;
+        // Load prices
+        try {
+          const doc = await db.collection('admin').doc('settings').get();
+          if (doc.exists) {
+            const d = doc.data();
+            priceCache = d.prices || priceCache;
+            priceLikes.value = priceCache.likes || 2;
+            priceComments.value = priceCache.comments || 3;
+            priceReposts.value = priceCache.reposts || 4;
+            priceFollowers.value = priceCache.followers || 5;
+          }
+        } catch (e) {}
+        loadStats();
+        loadAllUsers();
+        loadAllTasks();
+        switchTab('users');
+      } else {
+        authSection.style.display = 'block';
+        adminPanel.classList.add('hidden');
+      }
+    });
+
+    adminLoginBtn.addEventListener('click', adminLogin);
+    adminPasswordInput.addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
+    adminEmailInput.addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
+    logoutBtn.addEventListener('click', () => auth.signOut());
+
+    // LOAD STATS
+    async function loadStats() {
+      try {
+        const usersSnap = await db.collection('users').get();
+        let totalCoin = 0, refs = 0, taskCount = 0;
+        const tasksPromises = [];
+        usersSnap.forEach(doc => {
+          const d = doc.data();
+          totalCoin += (d.coins || 0);
+          refs += (d.referrals || 0);
+          tasksPromises.push(db.collection('users').doc(doc.id).collection('activeTasks').get());
+        });
+        const taskResults = await Promise.allSettled(tasksPromises);
+        taskResults.forEach(r => {
+          if (r.status === 'fulfilled') taskCount += r.value.size;
+        });
+        totalUsers.textContent = usersSnap.size;
+        totalCoins.textContent = totalCoin.toLocaleString();
+        totalTasks.textContent = taskCount;
+        totalReferrals.textContent = refs;
+      } catch (e) { console.error(e); }
+    }
+
+    // LOAD USERS
+    async function loadAllUsers(filter = '') {
+      try {
+        const snap = await db.collection('users').get();
+        allUsers = [];
+        snap.forEach(doc => {
+          const d = doc.data();
+          d.uid = doc.id;
+          allUsers.push(d);
+        });
+        renderUsers(filter);
+      } catch (e) { showToast('Error loading users: ' + e.message, true); }
+    }
+
+    function renderUsers(filter = '') {
+      const q = filter.toLowerCase().trim();
+      let filtered = allUsers;
+      if (q) {
+        filtered = allUsers.filter(u => 
+          (u.email || '').toLowerCase().includes(q) || 
+          (u.displayName || '').toLowerCase().includes(q) ||
+          (u.referralCode || '').toLowerCase().includes(q)
+        );
+      }
+      if (filtered.length === 0) {
+        userList.innerHTML = `<div style="padding:20px;text-align:center;color:#555;">No users found.</div>`;
+        return;
+      }
+      let html = '';
+      filtered.forEach(u => {
+        const email = u.email || 'no-email';
+        const coins = u.coins || 0;
+        const tasks = u.tasksDone || 0;
+        const refs = u.referrals || 0;
+        const banned = u.banned || false;
+        const warned = u.warned || false;
+        html += `
+          <div class="user-item" data-uid="${u.uid}">
+            <div class="info">
+              <strong>${u.displayName || email.split('@')[0]}</strong>
+              <div class="email">${email}</div>
+              <div><span class="coins">🪙 ${coins}</span> · Tasks: ${tasks} · Ref: ${refs}</div>
+              ${banned ? '<span class="badge" style="background:#6a1a1a;">🚫 BANNED</span>' : ''}
+              ${warned ? '<span class="badge" style="background:#a87a2a;">⚠️ WARNED</span>' : ''}
+            </div>
+            <div class="actions">
+              <button class="coin" data-uid="${u.uid}" data-action="addcoins"><i class="fas fa-plus-circle"></i> +50</button>
+              <button class="coin" data-uid="${u.uid}" data-action="subcoins"><i class="fas fa-minus-circle"></i> -20</button>
+              <button class="warn" data-uid="${u.uid}" data-action="warn"><i class="fas fa-exclamation-triangle"></i> Warn</button>
+              <button class="ban" data-uid="${u.uid}" data-action="ban"><i class="fas fa-ban"></i> Ban</button>
+              <button class="ban" style="background:#1a5a2a;border-color:#2a7a3a;color:#8aff8a;" data-uid="${u.uid}" data-action="unban"><i class="fas fa-undo"></i> Unban</button>
+              <button style="background:#1a2a4a;border-color:#2a3a5a;color:#8ab4ff;" data-uid="${u.uid}" data-action="tasks"><i class="fas fa-tasks"></i> Tasks</button>
+            </div>
+          </div>
+        `;
+      });
+      userList.innerHTML = html;
+
+      document.querySelectorAll('.user-item .actions button').forEach(btn => {
+        btn.addEventListener('click', handleUserAction);
+      });
+    }
+
+    // USER ACTIONS
+    async function handleUserAction(e) {
+      const btn = e.currentTarget;
+      const uid = btn.dataset.uid;
+      const action = btn.dataset.action;
+      if (!uid) return;
+
+      try {
+        if (action === 'addcoins') {
+          await db.collection('users').doc(uid).update({ coins: firebase.firestore.FieldValue.increment(50) });
+          showToast('+50 coins added.');
+          loadAllUsers(searchUser.value);
+          loadStats();
+        } else if (action === 'subcoins') {
+          await db.collection('users').doc(uid).update({ coins: firebase.firestore.FieldValue.increment(-20) });
+          showToast('-20 coins removed.');
+          loadAllUsers(searchUser.value);
+          loadStats();
+        } else if (action === 'warn') {
+          await db.collection('users').doc(uid).update({ warned: true });
+          showToast('User warned.');
+          loadAllUsers(searchUser.value);
+        } else if (action === 'ban') {
+          await db.collection('users').doc(uid).update({ banned: true });
+          showToast('User banned.');
+          loadAllUsers(searchUser.value);
+        } else if (action === 'unban') {
+          await db.collection('users').doc(uid).update({ banned: false, warned: false });
+          showToast('User unbanned.');
+          loadAllUsers(searchUser.value);
+        } else if (action === 'tasks') {
+          const snap = await db.collection('users').doc(uid).collection('activeTasks').get();
+          let msg = '';
+          snap.forEach(d => { msg += `${d.data().serviceType} (${d.data().remaining}/${d.data().quantity})  `; });
+          showToast(msg || 'No active tasks.');
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      }
+    }
+
+    // LOAD ALL TASKS
+    async function loadAllTasks() {
+      try {
+        const usersSnap = await db.collection('users').get();
+        let html = '';
+        let count = 0;
+        for (const doc of usersSnap.docs) {
+          const uid = doc.id;
+          const userEmail = doc.data().email || uid;
+          const tasksSnap = await db.collection('users').doc(uid).collection('activeTasks').get();
+          tasksSnap.forEach(t => {
+            const d = t.data();
+            count++;
+            html += `
+              <div class="user-item">
+                <div class="info">
+                  <strong>${d.serviceType}</strong> · ${d.quantity} total · ${d.remaining} left
+                  <div class="email">${userEmail}</div>
+                  <div style="font-size:0.7rem;color:#666;">${d.link || 'no link'}</div>
+                </div>
+                <div class="actions">
+                  <button data-taskid="${t.id}" data-uid="${uid}" data-action="deletetask" style="background:#6a1a1a;border-color:#5a2a2a;color:#ff6b6b;"><i class="fas fa-trash"></i> Delete</button>
+                </div>
+              </div>
+            `;
+          });
+        }
+        if (count === 0) html = '<div style="padding:20px;text-align:center;color:#555;">No active tasks across all users.</div>';
+        taskList.innerHTML = html;
+        taskList.querySelectorAll('[data-action="deletetask"]').forEach(btn => {
+          btn.addEventListener('click', async function() {
+            const uid = this.dataset.uid;
+            const taskId = this.dataset.taskid;
+            if (confirm('Delete this task?')) {
+              await db.collection('users').doc(uid).collection('activeTasks').doc(taskId).delete();
+              showToast('Task deleted.');
+              loadAllTasks();
+              loadStats();
+            }
+          });
+        });
+      } catch (e) { showToast('Error loading tasks: ' + e.message, true); }
+    }
+
+    // SEARCH
+    searchBtn.addEventListener('click', () => loadAllUsers(searchUser.value));
+    searchUser.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAllUsers(searchUser.value); });
+    refreshUsersBtn.addEventListener('click', () => { searchUser.value = ''; loadAllUsers(); });
+
+    // TABS
+    function switchTab(tab) {
+      currentTab = tab;
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      tabUsers.classList.toggle('hidden', tab !== 'users');
+      tabTasks.classList.toggle('hidden', tab !== 'tasks');
+      tabSettings.classList.toggle('hidden', tab !== 'settings');
+      if (tab === 'tasks') loadAllTasks();
+      if (tab === 'users') loadAllUsers(searchUser.value);
+      if (tab === 'settings') loadStats();
+    }
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    // SAVE PRICES
+    savePricesBtn.addEventListener('click', async () => {
+      const prices = {
+        likes: parseInt(priceLikes.value) || 2,
+        comments: parseInt(priceComments.value) || 3,
+        reposts: parseInt(priceReposts.value) || 4,
+        followers: parseInt(priceFollowers.value) || 5
+      };
+      try {
+        await db.collection('admin').doc('settings').set({ prices }, { merge: true });
+        priceCache = prices;
+        showToast('Prices saved!');
+      } catch (e) { showToast('Error: ' + e.message, true); }
+    });
+
+    // BAN / WARN by email
+    async function findUserByEmail(email) {
+      const snap = await db.collection('users').where('email', '==', email).get();
+      if (snap.empty) return null;
+      return snap.docs[0];
+    }
+
+    warnUserBtn.addEventListener('click', async () => {
+      const email = banUserInput.value.trim();
+      if (!email) { showToast('Enter email.', true); return; }
+      const doc = await findUserByEmail(email);
+      if (!doc) { showToast('User not found.', true); return; }
+      await db.collection('users').doc(doc.id).update({ warned: true });
+      showToast(`User ${email} warned.`);
+      banUserInput.value = '';
+      loadAllUsers(searchUser.value);
+    });
+
+    banUserBtn.addEventListener('click', async () => {
+      const email = banUserInput.value.trim();
+      if (!email) { showToast('Enter email.', true); return; }
+      const doc = await findUserByEmail(email);
+      if (!doc) { showToast('User not found.', true); return; }
+      await db.collection('users').doc(doc.id).update({ banned: true });
+      showToast(`User ${email} banned.`);
+      banUserInput.value = '';
+      loadAllUsers(searchUser.value);
+    });
+
+    unbanUserBtn.addEventListener('click', async () => {
+      const email = banUserInput.value.trim();
+      if (!email) { showToast('Enter email.', true); return; }
+      const doc = await findUserByEmail(email);
+      if (!doc) { showToast('User not found.', true); return; }
+      await db.collection('users').doc(doc.id).update({ banned: false, warned: false });
+      showToast(`User ${email} unbanned.`);
+      banUserInput.value = '';
+      loadAllUsers(searchUser.value);
+    });
+
+    // initial load
+    loadStats();
+    loadAllUsers();
+    loadAllTasks();
+
+    setInterval(() => { if (auth.currentUser) loadStats(); }, 30000);
+
+    console.log('🔥 Admin Panel v3.0 loaded.');
+  })();
+</script>
+</body>
+</html>
